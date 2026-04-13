@@ -1,0 +1,15 @@
+#ifndef QEMU_VIRT_H
+#define QEMU_VIRT_H
+
+#include <stdint.h>
+
+#define QEMU_VIRT_RAM_BASE 0x80000000UL
+#define QEMU_VIRT_RAM_SIZE (128UL * 1024UL * 1024UL)
+
+#define UART0_BASE 0x10000000UL
+
+#define VIRTIO_MMIO_BASE   0x10001000UL
+#define VIRTIO_MMIO_STRIDE 0x1000UL
+#define VIRTIO_MMIO_COUNT  8UL
+
+#endif
