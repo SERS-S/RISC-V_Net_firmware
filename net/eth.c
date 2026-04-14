@@ -1,5 +1,6 @@
 #include "eth.h"
 
+#include "arp.h"
 #include "endian.h"
 #include "uart.h"
 
@@ -62,7 +63,9 @@ void eth_input(NETIF *nif, const uint8_t *frame, uint16_t len)
     switch (eth_type)
     {
         case ETH_TYPE_ARP:
-            uart_puts("eth: ARP handler not implemented yet\n");
+            arp_input(nif,
+                      frame + sizeof(ETH_HDR),
+                      (uint16_t)(len - sizeof(ETH_HDR)));
             break;
         case ETH_TYPE_IPV4:
             uart_puts("eth: IPv4 handler not implemented yet\n");

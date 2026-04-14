@@ -4,6 +4,7 @@ CC      := $(CROSS)gcc
 OBJDUMP := $(CROSS)objdump
 SIZE    := $(CROSS)size
 QEMU    ?= qemu-system-riscv64
+SUDO    ?= sudo
 
 BUILD_DIR := build
 TARGET    := $(BUILD_DIR)/hello-uart.elf
@@ -12,6 +13,20 @@ DISASM    := $(BUILD_DIR)/hello-uart.disasm
 
 TEST_EBREAK ?= 0
 TEST_PANIC  ?= 0
+NET          ?= user
+TAP_IF       ?= tap0
+VMNET_START  ?= 192.168.100.10
+VMNET_END    ?= 192.168.100.254
+VMNET_MASK   ?= 255.255.255.0
+
+QEMU_NETDEV_user  := user,id=net0
+QEMU_NETDEV_tap   := tap,id=net0,ifname=$(TAP_IF),script=no,downscript=no
+QEMU_NETDEV_vmnet := vmnet-host,id=net0,start-address=$(VMNET_START),end-address=$(VMNET_END),subnet-mask=$(VMNET_MASK)
+QEMU_NETDEV       := $(QEMU_NETDEV_$(NET))
+
+ifeq ($(QEMU_NETDEV),)
+$(error Unknown NET='$(NET)'. Use NET=user, NET=tap, or NET=vmnet)
+endif
 
 CFLAGS := \
 	-Wall -Wextra -Werror \
@@ -40,6 +55,7 @@ SRCS_C := \
 	drivers/virtqueue.c \
 	drivers/virtio_net.c \
 	net/eth.c \
+	net/arp.c \
 	platform/uart.c \
 	platform/panic.c \
 	platform/trap.c
@@ -54,6 +70,7 @@ OBJS := \
 	$(BUILD_DIR)/virtqueue.o \
 	$(BUILD_DIR)/virtio_net.o \
 	$(BUILD_DIR)/eth.o \
+	$(BUILD_DIR)/arp.o \
 	$(BUILD_DIR)/uart.o \
 	$(BUILD_DIR)/panic.o \
 	$(BUILD_DIR)/trap.o \
@@ -77,7 +94,10 @@ $(BUILD_DIR)/virtqueue.o: drivers/virtqueue.c drivers/virtqueue.h | $(BUILD_DIR)
 $(BUILD_DIR)/virtio_net.o: drivers/virtio_net.c drivers/virtio_net.h drivers/virtio_mmio.h drivers/virtqueue.h net/eth.h net/netif.h platform/uart.h | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(BUILD_DIR)/eth.o: net/eth.c net/eth.h net/endian.h net/netif.h platform/uart.h | $(BUILD_DIR)
+$(BUILD_DIR)/eth.o: net/eth.c net/eth.h net/arp.h net/endian.h net/netif.h platform/uart.h | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/arp.o: net/arp.c net/arp.h net/eth.h net/endian.h net/netif.h platform/uart.h | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD_DIR)/uart.o: platform/uart.c platform/uart.h platform/qemu_virt.h | $(BUILD_DIR)
@@ -108,7 +128,23 @@ run: $(TARGET)
 		-display none \
 		-serial stdio \
 		-monitor none \
-		-netdev user,id=net0 \
+		-netdev $(QEMU_NETDEV) \
+		-device virtio-net-device,netdev=net0,mac=52:54:00:12:34:56 \
+		-device loader,file=$(TARGET),cpu-num=0
+
+run-tap:
+	$(MAKE) run NET=tap
+
+run-vmnet: $(TARGET)
+	$(SUDO) $(QEMU) \
+		-machine virt \
+		-m 128M \
+		-smp 1 \
+		-bios none \
+		-display none \
+		-serial stdio \
+		-monitor none \
+		-netdev $(QEMU_NETDEV_vmnet) \
 		-device virtio-net-device,netdev=net0,mac=52:54:00:12:34:56 \
 		-device loader,file=$(TARGET),cpu-num=0
 
@@ -122,7 +158,7 @@ debug: $(TARGET)
 		-serial stdio \
 		-monitor none \
 		-S -gdb tcp::1234 \
-		-netdev user,id=net0 \
+		-netdev $(QEMU_NETDEV) \
 		-device virtio-net-device,netdev=net0,mac=52:54:00:12:34:56 \
 		-device loader,file=$(TARGET),cpu-num=0
 
@@ -132,4 +168,4 @@ disasm: $(TARGET)
 clean:
 	rm -rf $(BUILD_DIR)/*
 
-.PHONY: all run debug disasm clean
+.PHONY: all run run-tap run-vmnet debug disasm clean
