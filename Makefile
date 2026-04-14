@@ -130,6 +130,6 @@ disasm: $(TARGET)
 	$(OBJDUMP) -d $(TARGET) > $(DISASM)
 
 clean:
-	rm -rf $(BUILD_DIR)
+	rm -rf $(BUILD_DIR)/*
 
 .PHONY: all run debug disasm clean
