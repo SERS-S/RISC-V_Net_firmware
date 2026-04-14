@@ -25,6 +25,7 @@ CFLAGS := \
 	-msmall-data-limit=0 \
 	-Iplatform \
 	-Idrivers \
+	-Inet \
 	-DTEST_EBREAK=$(TEST_EBREAK) \
 	-DTEST_PANIC=$(TEST_PANIC)
 
@@ -38,6 +39,7 @@ SRCS_C := \
 	drivers/virtio_mmio.c \
 	drivers/virtqueue.c \
 	drivers/virtio_net.c \
+	net/eth.c \
 	platform/uart.c \
 	platform/panic.c \
 	platform/trap.c
@@ -51,6 +53,7 @@ OBJS := \
 	$(BUILD_DIR)/virtio_mmio.o \
 	$(BUILD_DIR)/virtqueue.o \
 	$(BUILD_DIR)/virtio_net.o \
+	$(BUILD_DIR)/eth.o \
 	$(BUILD_DIR)/uart.o \
 	$(BUILD_DIR)/panic.o \
 	$(BUILD_DIR)/trap.o \
@@ -62,7 +65,7 @@ all: $(TARGET)
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
 
-$(BUILD_DIR)/main.o: app/main.c drivers/virtio_mmio.h drivers/virtio_net.h platform/panic.h platform/uart.h | $(BUILD_DIR)
+$(BUILD_DIR)/main.o: app/main.c drivers/virtio_mmio.h drivers/virtio_net.h net/eth.h net/netif.h platform/panic.h platform/uart.h | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD_DIR)/virtio_mmio.o: drivers/virtio_mmio.c drivers/virtio_mmio.h platform/qemu_virt.h platform/uart.h | $(BUILD_DIR)
@@ -71,7 +74,10 @@ $(BUILD_DIR)/virtio_mmio.o: drivers/virtio_mmio.c drivers/virtio_mmio.h platform
 $(BUILD_DIR)/virtqueue.o: drivers/virtqueue.c drivers/virtqueue.h | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(BUILD_DIR)/virtio_net.o: drivers/virtio_net.c drivers/virtio_net.h drivers/virtio_mmio.h drivers/virtqueue.h platform/uart.h | $(BUILD_DIR)
+$(BUILD_DIR)/virtio_net.o: drivers/virtio_net.c drivers/virtio_net.h drivers/virtio_mmio.h drivers/virtqueue.h net/eth.h net/netif.h platform/uart.h | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/eth.o: net/eth.c net/eth.h net/endian.h net/netif.h platform/uart.h | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD_DIR)/uart.o: platform/uart.c platform/uart.h platform/qemu_virt.h | $(BUILD_DIR)

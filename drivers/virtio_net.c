@@ -1,5 +1,6 @@
 #include "virtio_net.h"
 
+#include "eth.h"
 #include "uart.h"
 #include "virtqueue.h"
 
@@ -8,7 +9,6 @@
 
 #define VIRTIO_NET_RX_BUFFERS 4U
 #define VIRTIO_NET_BUFFER_SIZE 2048U
-#define VIRTIO_NET_ETH_FRAME_MIN 60U
 #define VIRTIO_NET_HDR_SIZE 10U
 
 typedef struct virtio_net_hdr
@@ -24,6 +24,7 @@ typedef struct virtio_net_hdr
 static VIRTIO_MMIO_DEVICE g_device;
 static VIRTQUEUE g_rx_vq;
 static VIRTQUEUE g_tx_vq;
+static NETIF g_netif;
 static uint8_t g_mac[6];
 static int g_ready;
 static int g_tx_busy;
@@ -40,6 +41,14 @@ static void memzero(void *ptr, uintptr_t len)
     for (uintptr_t i = 0; i < len; ++i)
     {
         p[i] = 0;
+    }
+}
+
+static void copy_bytes(uint8_t *dst, const uint8_t *src, uint16_t len)
+{
+    for (uint16_t i = 0; i < len; ++i)
+    {
+        dst[i] = src[i];
     }
 }
 
@@ -85,6 +94,14 @@ static void read_mac(uint32_t features0)
     g_mac[5] = 0x01;
 }
 
+static void setup_netif(void)
+{
+    copy_bytes(g_netif.mac, g_mac, ETH_ADDR_LEN);
+    g_netif.ipv4_addr = NETIF_IPV4_ADDR(192, 168, 100, 2);
+    g_netif.ipv4_mask = NETIF_IPV4_ADDR(255, 255, 255, 0);
+    g_netif.tx = virtio_net_tx;
+}
+
 static int post_rx_buffer(uint16_t id)
 {
     return virtqueue_add_buffer(&g_rx_vq,
@@ -106,36 +123,6 @@ static int post_initial_rx_buffers(void)
 
     virtio_mmio_notify_queue(&g_device, VIRTIO_NET_RX_QUEUE);
     return 1;
-}
-
-static void write_test_frame(uint32_t *total_len)
-{
-    uint8_t *frame = g_tx_buffer + VIRTIO_NET_HDR_SIZE;
-
-    memzero(g_tx_buffer, VIRTIO_NET_BUFFER_SIZE);
-
-    for (uintptr_t i = 0; i < 6; ++i)
-    {
-        frame[i] = 0xff;
-        frame[6 + i] = g_mac[i];
-    }
-
-    frame[12] = 0x88;
-    frame[13] = 0xb5;
-
-    static const char payload[] = "riscv-virtio-net-tx-test";
-    uintptr_t pos = 14;
-    for (uintptr_t i = 0; payload[i] != '\0'; ++i)
-    {
-        frame[pos++] = (uint8_t)payload[i];
-    }
-
-    while (pos < VIRTIO_NET_ETH_FRAME_MIN)
-    {
-        frame[pos++] = 0;
-    }
-
-    *total_len = VIRTIO_NET_HDR_SIZE + (uint32_t)pos;
 }
 
 int virtio_net_init(VIRTIO_MMIO_DEVICE *device)
@@ -206,6 +193,8 @@ int virtio_net_init(VIRTIO_MMIO_DEVICE *device)
     }
 
     read_mac(features0);
+    setup_netif();
+
     uart_puts("  mac      : ");
     print_mac();
     uart_puts("\n");
@@ -252,6 +241,11 @@ int virtio_net_init(VIRTIO_MMIO_DEVICE *device)
     return 1;
 }
 
+NETIF *virtio_net_netif(void)
+{
+    return &g_netif;
+}
+
 void virtio_net_poll_tx(void)
 {
     uint32_t id;
@@ -268,11 +262,11 @@ void virtio_net_poll_tx(void)
     }
 }
 
-int virtio_net_send_test_frame(void)
+int virtio_net_tx(const void *frame, uint16_t len)
 {
-    uint32_t total_len = 0;
+    uint32_t total_len;
 
-    if (!g_ready)
+    if (!g_ready || !frame || (len > ETH_FRAME_MAX))
     {
         return 0;
     }
@@ -288,7 +282,9 @@ int virtio_net_send_test_frame(void)
         return 0;
     }
 
-    write_test_frame(&total_len);
+    memzero(g_tx_buffer, VIRTIO_NET_HDR_SIZE);
+    copy_bytes(g_tx_buffer + VIRTIO_NET_HDR_SIZE, (const uint8_t *)frame, len);
+    total_len = VIRTIO_NET_HDR_SIZE + len;
 
     if (!virtqueue_add_buffer(&g_tx_vq, 0, (uintptr_t)g_tx_buffer, total_len, 0))
     {
@@ -298,7 +294,7 @@ int virtio_net_send_test_frame(void)
     g_tx_busy = 1;
     virtio_mmio_notify_queue(&g_device, VIRTIO_NET_TX_QUEUE);
 
-    uart_puts("virtio-net tx test frame queued: len=");
+    uart_puts("virtio-net tx frame queued: len=");
     uart_puthex64(total_len);
     uart_puts("\n");
 
@@ -325,6 +321,17 @@ void virtio_net_poll_rx(void)
 
         if (id < VIRTIO_NET_RX_BUFFERS)
         {
+            if (len > VIRTIO_NET_HDR_SIZE)
+            {
+                const uint8_t *frame = g_rx_buffers[id] + VIRTIO_NET_HDR_SIZE;
+                const uint16_t frame_len = (uint16_t)(len - VIRTIO_NET_HDR_SIZE);
+                eth_input(&g_netif, frame, frame_len);
+            }
+            else
+            {
+                uart_puts("virtio-net rx: short virtio header\n");
+            }
+
             post_rx_buffer((uint16_t)id);
             virtio_mmio_notify_queue(&g_device, VIRTIO_NET_RX_QUEUE);
         }
