@@ -56,6 +56,9 @@ SRCS_C := \
 	drivers/virtio_net.c \
 	net/eth.c \
 	net/arp.c \
+	net/checksum.c \
+	net/ipv4.c \
+	net/udp.c \
 	platform/uart.c \
 	platform/panic.c \
 	platform/trap.c
@@ -71,6 +74,9 @@ OBJS := \
 	$(BUILD_DIR)/virtio_net.o \
 	$(BUILD_DIR)/eth.o \
 	$(BUILD_DIR)/arp.o \
+	$(BUILD_DIR)/checksum.o \
+	$(BUILD_DIR)/ipv4.o \
+	$(BUILD_DIR)/udp.o \
 	$(BUILD_DIR)/uart.o \
 	$(BUILD_DIR)/panic.o \
 	$(BUILD_DIR)/trap.o \
@@ -94,10 +100,19 @@ $(BUILD_DIR)/virtqueue.o: drivers/virtqueue.c drivers/virtqueue.h | $(BUILD_DIR)
 $(BUILD_DIR)/virtio_net.o: drivers/virtio_net.c drivers/virtio_net.h drivers/virtio_mmio.h drivers/virtqueue.h net/eth.h net/netif.h platform/uart.h | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(BUILD_DIR)/eth.o: net/eth.c net/eth.h net/arp.h net/endian.h net/netif.h platform/uart.h | $(BUILD_DIR)
+$(BUILD_DIR)/eth.o: net/eth.c net/eth.h net/arp.h net/endian.h net/ipv4.h net/netif.h platform/uart.h | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD_DIR)/arp.o: net/arp.c net/arp.h net/eth.h net/endian.h net/netif.h platform/uart.h | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/checksum.o: net/checksum.c net/checksum.h | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/ipv4.o: net/ipv4.c net/ipv4.h net/checksum.h net/endian.h net/eth.h net/netif.h net/udp.h platform/uart.h | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/udp.o: net/udp.c net/udp.h net/checksum.h net/endian.h net/eth.h net/ipv4.h net/netif.h platform/uart.h | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD_DIR)/uart.o: platform/uart.c platform/uart.h platform/qemu_virt.h | $(BUILD_DIR)

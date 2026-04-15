@@ -2,6 +2,7 @@
 
 #include "arp.h"
 #include "endian.h"
+#include "ipv4.h"
 #include "uart.h"
 
 static void copy_bytes(uint8_t *dst, const uint8_t *src, uint16_t len)
@@ -68,7 +69,10 @@ void eth_input(NETIF *nif, const uint8_t *frame, uint16_t len)
                       (uint16_t)(len - sizeof(ETH_HDR)));
             break;
         case ETH_TYPE_IPV4:
-            uart_puts("eth: IPv4 handler not implemented yet\n");
+            ipv4_input(nif,
+                       hdr->src,
+                       frame + sizeof(ETH_HDR),
+                       (uint16_t)(len - sizeof(ETH_HDR)));
             break;
         default:
             uart_puts("eth: drop unsupported ethertype\n");
