@@ -3,6 +3,7 @@
 #include "checksum.h"
 #include "endian.h"
 #include "eth.h"
+#include "icmp.h"
 #include "uart.h"
 #include "udp.h"
 
@@ -102,7 +103,7 @@ void ipv4_input(NETIF *nif,
             udp_input(nif, src_mac, src_ip, dst_ip, payload, payload_len);
             break;
         case IPV4_PROTO_ICMP:
-            uart_puts("ipv4: ICMP handler not implemented yet\n");
+            icmp_input(nif, src_mac, src_ip, dst_ip, payload, payload_len);
             break;
         default:
             uart_puts("ipv4: drop unsupported protocol\n");

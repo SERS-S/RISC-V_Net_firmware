@@ -58,6 +58,7 @@ SRCS_C := \
 	net/arp.c \
 	net/checksum.c \
 	net/ipv4.c \
+	net/icmp.c \
 	net/udp.c \
 	platform/uart.c \
 	platform/panic.c \
@@ -76,6 +77,7 @@ OBJS := \
 	$(BUILD_DIR)/arp.o \
 	$(BUILD_DIR)/checksum.o \
 	$(BUILD_DIR)/ipv4.o \
+	$(BUILD_DIR)/icmp.o \
 	$(BUILD_DIR)/udp.o \
 	$(BUILD_DIR)/uart.o \
 	$(BUILD_DIR)/panic.o \
@@ -109,7 +111,10 @@ $(BUILD_DIR)/arp.o: net/arp.c net/arp.h net/eth.h net/endian.h net/netif.h platf
 $(BUILD_DIR)/checksum.o: net/checksum.c net/checksum.h | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(BUILD_DIR)/ipv4.o: net/ipv4.c net/ipv4.h net/checksum.h net/endian.h net/eth.h net/netif.h net/udp.h platform/uart.h | $(BUILD_DIR)
+$(BUILD_DIR)/ipv4.o: net/ipv4.c net/ipv4.h net/checksum.h net/endian.h net/eth.h net/icmp.h net/netif.h net/udp.h platform/uart.h | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/icmp.o: net/icmp.c net/icmp.h net/checksum.h net/endian.h net/eth.h net/ipv4.h net/netif.h platform/uart.h | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD_DIR)/udp.o: net/udp.c net/udp.h net/checksum.h net/endian.h net/eth.h net/ipv4.h net/netif.h platform/uart.h | $(BUILD_DIR)
