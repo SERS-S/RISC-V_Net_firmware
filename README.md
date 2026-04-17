@@ -1,4 +1,4 @@
-# RISC-V Net Firmware
+# RISC-V Net Firmware (Educational project)
 
 ![Target](https://img.shields.io/badge/target-QEMU%20virt-2f80ed)
 ![ISA](https://img.shields.io/badge/ISA-RISC--V-283272)
