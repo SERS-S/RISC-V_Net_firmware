@@ -3,7 +3,7 @@
 #include "arp.h"
 #include "endian.h"
 #include "ipv4.h"
-#include "uart.h"
+#include "stats.h"
 
 static void copy_bytes(uint8_t *dst, const uint8_t *src, uint16_t len)
 {
@@ -43,39 +43,36 @@ void eth_input(NETIF *nif, const uint8_t *frame, uint16_t len)
 {
     if (len < sizeof(ETH_HDR))
     {
-        uart_puts("eth: drop short frame\n");
+        ++g_net_stats.drop_bad_len;
         return;
     }
 
     const ETH_HDR *hdr = (const ETH_HDR *)frame;
     if (!mac_equal(hdr->dst, nif->mac) && !mac_is_broadcast(hdr->dst))
     {
-        uart_puts("eth: drop foreign dst mac\n");
+        ++g_net_stats.drop_wrong_dst;
         return;
     }
 
     const uint16_t eth_type = ntohs(hdr->type);
-    uart_puts("eth: input type=");
-    uart_puthex64(eth_type);
-    uart_puts(" len=");
-    uart_puthex64(len);
-    uart_puts("\n");
 
     switch (eth_type)
     {
         case ETH_TYPE_ARP:
+            ++g_net_stats.rx_arp;
             arp_input(nif,
                       frame + sizeof(ETH_HDR),
                       (uint16_t)(len - sizeof(ETH_HDR)));
             break;
         case ETH_TYPE_IPV4:
+            ++g_net_stats.rx_ipv4;
             ipv4_input(nif,
                        hdr->src,
                        frame + sizeof(ETH_HDR),
                        (uint16_t)(len - sizeof(ETH_HDR)));
             break;
         default:
-            uart_puts("eth: drop unsupported ethertype\n");
+            ++g_net_stats.drop_unsupported;
             break;
     }
 }
@@ -91,6 +88,7 @@ int eth_output(NETIF *nif,
 
     if (!nif || !nif->tx || (payload_len > ETH_MTU))
     {
+        ++g_net_stats.tx_errors;
         return 0;
     }
 
@@ -106,11 +104,12 @@ int eth_output(NETIF *nif,
         frame[frame_len++] = 0;
     }
 
-    uart_puts("eth: output type=");
-    uart_puthex64(eth_type);
-    uart_puts(" len=");
-    uart_puthex64(frame_len);
-    uart_puts("\n");
+    if (!nif->tx(frame, frame_len))
+    {
+        ++g_net_stats.tx_errors;
+        return 0;
+    }
 
-    return nif->tx(frame, frame_len);
+    ++g_net_stats.tx_frames;
+    return 1;
 }

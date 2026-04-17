@@ -3,7 +3,7 @@
 #include "checksum.h"
 #include "endian.h"
 #include "ipv4.h"
-#include "uart.h"
+#include "stats.h"
 
 static void copy_bytes(uint8_t *dst, const uint8_t *src, uint16_t len)
 {
@@ -11,17 +11,6 @@ static void copy_bytes(uint8_t *dst, const uint8_t *src, uint16_t len)
     {
         dst[i] = src[i];
     }
-}
-
-static void print_ipv4(uint32_t ip)
-{
-    uart_puthex64((ip >> 24) & 0xffU);
-    uart_putc('.');
-    uart_puthex64((ip >> 16) & 0xffU);
-    uart_putc('.');
-    uart_puthex64((ip >> 8) & 0xffU);
-    uart_putc('.');
-    uart_puthex64(ip & 0xffU);
 }
 
 uint16_t udp_checksum_ipv4(uint32_t src_ip,
@@ -61,7 +50,7 @@ void udp_input(NETIF *nif,
 
     if (!nif || !src_mac || !packet || (len < UDP_HDR_LEN))
     {
-        uart_puts("udp: drop short packet\n");
+        ++g_net_stats.drop_bad_len;
         return;
     }
 
@@ -72,34 +61,24 @@ void udp_input(NETIF *nif,
 
     if ((udp_len < UDP_HDR_LEN) || (udp_len > len))
     {
-        uart_puts("udp: drop bad length\n");
+        ++g_net_stats.drop_bad_len;
         return;
     }
 
     if ((hdr->checksum != 0U) &&
         (udp_checksum_ipv4(src_ip, dst_ip, packet, udp_len) != 0U))
     {
-        uart_puts("udp: drop bad checksum\n");
+        ++g_net_stats.drop_bad_checksum;
         return;
     }
 
     if (dst_port != UDP_ECHO_PORT)
     {
-        uart_puts("udp: drop dst port=");
-        uart_puthex64(dst_port);
-        uart_puts("\n");
+        ++g_net_stats.drop_unsupported;
         return;
     }
 
     const uint16_t payload_len = (uint16_t)(udp_len - UDP_HDR_LEN);
-
-    uart_puts("udp: echo request src=");
-    print_ipv4(src_ip);
-    uart_puts(" sport=");
-    uart_puthex64(src_port);
-    uart_puts(" payload_len=");
-    uart_puthex64(payload_len);
-    uart_puts("\n");
 
     UDP_HDR *reply_hdr = (UDP_HDR *)reply;
     reply_hdr->src_port = htons(dst_port);
@@ -115,18 +94,11 @@ void udp_input(NETIF *nif,
     }
     reply_hdr->checksum = htons(checksum);
 
-    if (ipv4_output(nif,
-                    src_mac,
-                    nif->ipv4_addr,
-                    src_ip,
-                    IPV4_PROTO_UDP,
-                    reply,
-                    udp_len))
-    {
-        uart_puts("udp: echo reply sent\n");
-    }
-    else
-    {
-        uart_puts("udp: echo reply tx failed\n");
-    }
+    (void)ipv4_output(nif,
+                      src_mac,
+                      nif->ipv4_addr,
+                      src_ip,
+                      IPV4_PROTO_UDP,
+                      reply,
+                      udp_len);
 }

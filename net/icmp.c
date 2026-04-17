@@ -3,7 +3,7 @@
 #include "checksum.h"
 #include "endian.h"
 #include "ipv4.h"
-#include "uart.h"
+#include "stats.h"
 
 static void copy_bytes(uint8_t *dst, const uint8_t *src, uint16_t len)
 {
@@ -11,17 +11,6 @@ static void copy_bytes(uint8_t *dst, const uint8_t *src, uint16_t len)
     {
         dst[i] = src[i];
     }
-}
-
-static void print_ipv4(uint32_t ip)
-{
-    uart_puthex64((ip >> 24) & 0xffU);
-    uart_putc('.');
-    uart_puthex64((ip >> 16) & 0xffU);
-    uart_putc('.');
-    uart_puthex64((ip >> 8) & 0xffU);
-    uart_putc('.');
-    uart_puthex64(ip & 0xffU);
 }
 
 void icmp_input(NETIF *nif,
@@ -35,36 +24,28 @@ void icmp_input(NETIF *nif,
 
     if (!nif || !src_mac || !packet || (len < ICMP_ECHO_HDR_LEN))
     {
-        uart_puts("icmp: drop short packet\n");
+        ++g_net_stats.drop_bad_len;
         return;
     }
 
     if (len > ICMP_MAX_PACKET)
     {
-        uart_puts("icmp: drop oversized packet\n");
+        ++g_net_stats.drop_bad_len;
         return;
     }
 
     if (ip_checksum(packet, len) != 0U)
     {
-        uart_puts("icmp: drop bad checksum\n");
+        ++g_net_stats.drop_bad_checksum;
         return;
     }
 
     const ICMP_ECHO_HDR *hdr = (const ICMP_ECHO_HDR *)packet;
     if ((hdr->type != ICMP_ECHO_REQUEST) || (hdr->code != 0U))
     {
-        uart_puts("icmp: drop unsupported type/code\n");
+        ++g_net_stats.drop_unsupported;
         return;
     }
-
-    const uint16_t payload_len = (uint16_t)(len - ICMP_ECHO_HDR_LEN);
-
-    uart_puts("icmp: echo request src=");
-    print_ipv4(src_ip);
-    uart_puts(" payload_len=");
-    uart_puthex64(payload_len);
-    uart_puts("\n");
 
     copy_bytes(reply, packet, len);
 
@@ -74,18 +55,11 @@ void icmp_input(NETIF *nif,
     reply_hdr->checksum = 0;
     reply_hdr->checksum = htons(ip_checksum(reply, len));
 
-    if (ipv4_output(nif,
-                    src_mac,
-                    dst_ip,
-                    src_ip,
-                    IPV4_PROTO_ICMP,
-                    reply,
-                    len))
-    {
-        uart_puts("icmp: echo reply sent\n");
-    }
-    else
-    {
-        uart_puts("icmp: echo reply tx failed\n");
-    }
+    (void)ipv4_output(nif,
+                      src_mac,
+                      dst_ip,
+                      src_ip,
+                      IPV4_PROTO_ICMP,
+                      reply,
+                      len);
 }

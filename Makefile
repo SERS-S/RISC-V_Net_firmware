@@ -57,6 +57,7 @@ SRCS_C := \
 	net/eth.c \
 	net/arp.c \
 	net/checksum.c \
+	net/stats.c \
 	net/ipv4.c \
 	net/icmp.c \
 	net/udp.c \
@@ -76,6 +77,7 @@ OBJS := \
 	$(BUILD_DIR)/eth.o \
 	$(BUILD_DIR)/arp.o \
 	$(BUILD_DIR)/checksum.o \
+	$(BUILD_DIR)/stats.o \
 	$(BUILD_DIR)/ipv4.o \
 	$(BUILD_DIR)/icmp.o \
 	$(BUILD_DIR)/udp.o \
@@ -90,7 +92,7 @@ all: $(TARGET)
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
 
-$(BUILD_DIR)/main.o: app/main.c drivers/virtio_mmio.h drivers/virtio_net.h net/eth.h net/netif.h platform/panic.h platform/uart.h | $(BUILD_DIR)
+$(BUILD_DIR)/main.o: app/main.c drivers/virtio_mmio.h drivers/virtio_net.h net/eth.h net/netif.h net/stats.h platform/panic.h platform/uart.h | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD_DIR)/virtio_mmio.o: drivers/virtio_mmio.c drivers/virtio_mmio.h platform/qemu_virt.h platform/uart.h | $(BUILD_DIR)
@@ -99,25 +101,28 @@ $(BUILD_DIR)/virtio_mmio.o: drivers/virtio_mmio.c drivers/virtio_mmio.h platform
 $(BUILD_DIR)/virtqueue.o: drivers/virtqueue.c drivers/virtqueue.h | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(BUILD_DIR)/virtio_net.o: drivers/virtio_net.c drivers/virtio_net.h drivers/virtio_mmio.h drivers/virtqueue.h net/eth.h net/netif.h platform/uart.h | $(BUILD_DIR)
+$(BUILD_DIR)/virtio_net.o: drivers/virtio_net.c drivers/virtio_net.h drivers/virtio_mmio.h drivers/virtqueue.h net/eth.h net/netif.h net/stats.h platform/uart.h | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(BUILD_DIR)/eth.o: net/eth.c net/eth.h net/arp.h net/endian.h net/ipv4.h net/netif.h platform/uart.h | $(BUILD_DIR)
+$(BUILD_DIR)/eth.o: net/eth.c net/eth.h net/arp.h net/endian.h net/ipv4.h net/netif.h net/stats.h | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(BUILD_DIR)/arp.o: net/arp.c net/arp.h net/eth.h net/endian.h net/netif.h platform/uart.h | $(BUILD_DIR)
+$(BUILD_DIR)/arp.o: net/arp.c net/arp.h net/eth.h net/endian.h net/netif.h net/stats.h | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD_DIR)/checksum.o: net/checksum.c net/checksum.h | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(BUILD_DIR)/ipv4.o: net/ipv4.c net/ipv4.h net/checksum.h net/endian.h net/eth.h net/icmp.h net/netif.h net/udp.h platform/uart.h | $(BUILD_DIR)
+$(BUILD_DIR)/stats.o: net/stats.c net/stats.h platform/uart.h | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(BUILD_DIR)/icmp.o: net/icmp.c net/icmp.h net/checksum.h net/endian.h net/eth.h net/ipv4.h net/netif.h platform/uart.h | $(BUILD_DIR)
+$(BUILD_DIR)/ipv4.o: net/ipv4.c net/ipv4.h net/checksum.h net/endian.h net/eth.h net/icmp.h net/netif.h net/stats.h net/udp.h | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(BUILD_DIR)/udp.o: net/udp.c net/udp.h net/checksum.h net/endian.h net/eth.h net/ipv4.h net/netif.h platform/uart.h | $(BUILD_DIR)
+$(BUILD_DIR)/icmp.o: net/icmp.c net/icmp.h net/checksum.h net/endian.h net/eth.h net/ipv4.h net/netif.h net/stats.h | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/udp.o: net/udp.c net/udp.h net/checksum.h net/endian.h net/eth.h net/ipv4.h net/netif.h net/stats.h | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD_DIR)/uart.o: platform/uart.c platform/uart.h platform/qemu_virt.h | $(BUILD_DIR)

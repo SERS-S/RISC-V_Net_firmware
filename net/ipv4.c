@@ -4,7 +4,7 @@
 #include "endian.h"
 #include "eth.h"
 #include "icmp.h"
-#include "uart.h"
+#include "stats.h"
 #include "udp.h"
 
 static uint16_t g_ipv4_identification;
@@ -17,17 +17,6 @@ static void copy_bytes(uint8_t *dst, const uint8_t *src, uint16_t len)
     }
 }
 
-static void print_ipv4(uint32_t ip)
-{
-    uart_puthex64((ip >> 24) & 0xffU);
-    uart_putc('.');
-    uart_puthex64((ip >> 16) & 0xffU);
-    uart_putc('.');
-    uart_puthex64((ip >> 8) & 0xffU);
-    uart_putc('.');
-    uart_puthex64(ip & 0xffU);
-}
-
 void ipv4_input(NETIF *nif,
                 const uint8_t src_mac[ETH_ADDR_LEN],
                 const uint8_t *packet,
@@ -35,7 +24,7 @@ void ipv4_input(NETIF *nif,
 {
     if (!nif || !src_mac || !packet || (len < IPV4_HDR_MIN_LEN))
     {
-        uart_puts("ipv4: drop short packet\n");
+        ++g_net_stats.drop_bad_len;
         return;
     }
 
@@ -46,33 +35,33 @@ void ipv4_input(NETIF *nif,
 
     if (version != IPV4_VERSION)
     {
-        uart_puts("ipv4: drop bad version\n");
+        ++g_net_stats.drop_unsupported;
         return;
     }
 
     if ((ihl < IPV4_IHL_NO_OPT) || (header_len > len))
     {
-        uart_puts("ipv4: drop bad ihl\n");
+        ++g_net_stats.drop_bad_len;
         return;
     }
 
     const uint16_t total_len = ntohs(hdr->total_length);
     if ((total_len < header_len) || (total_len > len))
     {
-        uart_puts("ipv4: drop bad total length\n");
+        ++g_net_stats.drop_bad_len;
         return;
     }
 
     if (ip_checksum(packet, header_len) != 0U)
     {
-        uart_puts("ipv4: drop bad checksum\n");
+        ++g_net_stats.drop_bad_checksum;
         return;
     }
 
     const uint16_t flags_fragment = ntohs(hdr->flags_fragment);
     if ((flags_fragment & (IPV4_FLAG_MORE_FRAGMENTS | IPV4_FRAGMENT_OFFSET_MASK)) != 0U)
     {
-        uart_puts("ipv4: drop fragmented packet\n");
+        ++g_net_stats.drop_unsupported;
         return;
     }
 
@@ -80,33 +69,25 @@ void ipv4_input(NETIF *nif,
     const uint32_t dst_ip = ntohl(hdr->dst_addr);
     if (dst_ip != nif->ipv4_addr)
     {
-        uart_puts("ipv4: drop wrong dst=");
-        print_ipv4(dst_ip);
-        uart_puts("\n");
+        ++g_net_stats.drop_wrong_dst;
         return;
     }
 
     const uint8_t *payload = packet + header_len;
     const uint16_t payload_len = (uint16_t)(total_len - header_len);
 
-    uart_puts("ipv4: input proto=");
-    uart_puthex64(hdr->protocol);
-    uart_puts(" src=");
-    print_ipv4(src_ip);
-    uart_puts(" len=");
-    uart_puthex64(total_len);
-    uart_puts("\n");
-
     switch (hdr->protocol)
     {
         case IPV4_PROTO_UDP:
+            ++g_net_stats.rx_udp;
             udp_input(nif, src_mac, src_ip, dst_ip, payload, payload_len);
             break;
         case IPV4_PROTO_ICMP:
+            ++g_net_stats.rx_icmp;
             icmp_input(nif, src_mac, src_ip, dst_ip, payload, payload_len);
             break;
         default:
-            uart_puts("ipv4: drop unsupported protocol\n");
+            ++g_net_stats.drop_unsupported;
             break;
     }
 }
@@ -143,14 +124,6 @@ int ipv4_output(NETIF *nif,
     hdr->header_checksum = htons(ip_checksum(packet, (uint16_t)sizeof(IPV4_HDR)));
 
     copy_bytes(packet + sizeof(IPV4_HDR), (const uint8_t *)payload, payload_len);
-
-    uart_puts("ipv4: output proto=");
-    uart_puthex64(proto);
-    uart_puts(" dst=");
-    print_ipv4(dst_ip);
-    uart_puts(" len=");
-    uart_puthex64(total_len);
-    uart_puts("\n");
 
     return eth_output(nif, dst_mac, ETH_TYPE_IPV4, packet, total_len);
 }

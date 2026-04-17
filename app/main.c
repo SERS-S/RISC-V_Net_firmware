@@ -1,6 +1,6 @@
 #include <stdint.h>
 
-#include "eth.h"
+#include "stats.h"
 #include "virtio_mmio.h"
 #include "virtio_net.h"
 #include "panic.h"
@@ -16,24 +16,6 @@
 
 static volatile uint64_t g_bss_probe;
 static volatile uint64_t g_data_probe = 0x1122334455667788ULL;
-
-static void send_eth_test_frame(void)
-{
-    static const uint8_t broadcast_mac[ETH_ADDR_LEN] = 
-    {
-        0xff, 0xff, 0xff, 0xff, 0xff, 0xff
-    };
-    static const char payload[] = "riscv-eth-output-test";
-
-    if (!eth_output(virtio_net_netif(),
-                    broadcast_mac,
-                    0x88b5U,
-                    payload,
-                    (uint16_t)(sizeof(payload) - 1U)))
-    {
-        uart_puts("eth test frame pending or failed\n");
-    }
-}
 
 int main(void)
 {
@@ -69,8 +51,6 @@ int main(void)
         panic("virtio-net init failed");
     }
 
-    send_eth_test_frame();
-
     #if TEST_PANIC
         panic("manual panic requested");
     #endif
@@ -82,8 +62,16 @@ int main(void)
 
     for (;;)
     {
+        static uint32_t stats_tick;
+
         virtio_net_poll_rx();
         virtio_net_poll_tx();
+
+        ++stats_tick;
+        if ((stats_tick & 0x0000ffffU) == 0U)
+        {
+            net_stats_print_if_changed();
+        }
     }
 
     return 0;

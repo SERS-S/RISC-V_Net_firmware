@@ -1,7 +1,7 @@
 #include "arp.h"
 
 #include "endian.h"
-#include "uart.h"
+#include "stats.h"
 
 static ARP_ENTRY g_arp_cache[ARP_CACHE_SIZE];
 static uint8_t g_arp_next;
@@ -36,17 +36,6 @@ static void ipv4_to_bytes(uint8_t out[ARP_IPV4_ADDR_LEN], uint32_t ip)
     out[1] = (uint8_t)(ip >> 16);
     out[2] = (uint8_t)(ip >> 8);
     out[3] = (uint8_t)ip;
-}
-
-static void print_ipv4(uint32_t ip)
-{
-    uart_puthex64((ip >> 24) & 0xffU);
-    uart_putc('.');
-    uart_puthex64((ip >> 16) & 0xffU);
-    uart_putc('.');
-    uart_puthex64((ip >> 8) & 0xffU);
-    uart_putc('.');
-    uart_puthex64(ip & 0xffU);
 }
 
 const uint8_t *arp_cache_lookup(uint32_t ip)
@@ -84,17 +73,13 @@ void arp_cache_insert(uint32_t ip, const uint8_t mac[ETH_ADDR_LEN])
     g_arp_cache[slot].ip = ip;
     copy_bytes(g_arp_cache[slot].mac, mac, ETH_ADDR_LEN);
     g_arp_cache[slot].valid = 1;
-
-    uart_puts("arp: cache insert ip=");
-    print_ipv4(ip);
-    uart_puts("\n");
 }
 
 void arp_input(NETIF *nif, const uint8_t *payload, uint16_t len)
 {
     if (!nif || !payload || (len < sizeof(ARP_PACKET)))
     {
-        uart_puts("arp: drop short packet\n");
+        ++g_net_stats.drop_bad_len;
         return;
     }
 
@@ -110,7 +95,7 @@ void arp_input(NETIF *nif, const uint8_t *payload, uint16_t len)
         (arp->hlen != ETH_ADDR_LEN) ||
         (arp->plen != ARP_IPV4_ADDR_LEN))
     {
-        uart_puts("arp: drop unsupported format\n");
+        ++g_net_stats.drop_unsupported;
         return;
     }
 
@@ -122,19 +107,15 @@ void arp_input(NETIF *nif, const uint8_t *payload, uint16_t len)
 
     if (oper != ARP_OPER_REQUEST)
     {
-        uart_puts("arp: drop unsupported operation\n");
+        ++g_net_stats.drop_unsupported;
         return;
     }
 
     if (tpa != nif->ipv4_addr)
     {
-        uart_puts("arp: request not for us\n");
+        ++g_net_stats.drop_wrong_dst;
         return;
     }
-
-    uart_puts("arp: request for us from ");
-    print_ipv4(spa);
-    uart_puts("\n");
 
     arp_cache_insert(spa, arp->sha);
 
@@ -149,14 +130,7 @@ void arp_input(NETIF *nif, const uint8_t *payload, uint16_t len)
     copy_bytes(reply.tha, arp->sha, ETH_ADDR_LEN);
     ipv4_to_bytes(reply.tpa, spa);
 
-    if (eth_output(nif, arp->sha, ETH_TYPE_ARP, &reply, (uint16_t)sizeof(reply)))
-    {
-        uart_puts("arp: reply sent\n");
-    }
-    else
-    {
-        uart_puts("arp: reply tx failed\n");
-    }
+    (void)eth_output(nif, arp->sha, ETH_TYPE_ARP, &reply, (uint16_t)sizeof(reply));
 }
 
 int arp_request(NETIF *nif, uint32_t target_ip)
@@ -181,10 +155,6 @@ int arp_request(NETIF *nif, uint32_t target_ip)
     ipv4_to_bytes(request.spa, nif->ipv4_addr);
     zero_bytes(request.tha, ETH_ADDR_LEN);
     ipv4_to_bytes(request.tpa, target_ip);
-
-    uart_puts("arp: request target=");
-    print_ipv4(target_ip);
-    uart_puts("\n");
 
     return eth_output(nif,
                       broadcast_mac,

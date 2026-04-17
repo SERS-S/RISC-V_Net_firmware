@@ -1,6 +1,7 @@
 #include "virtio_net.h"
 
 #include "eth.h"
+#include "stats.h"
 #include "uart.h"
 #include "virtqueue.h"
 
@@ -254,11 +255,6 @@ void virtio_net_poll_tx(void)
     while (virtqueue_get_used(&g_tx_vq, &id, &len))
     {
         g_tx_busy = 0;
-        uart_puts("virtio-net tx complete: desc=");
-        uart_puthex64(id);
-        uart_puts(" len=");
-        uart_puthex64(len);
-        uart_puts("\n");
     }
 }
 
@@ -294,10 +290,6 @@ int virtio_net_tx(const void *frame, uint16_t len)
     g_tx_busy = 1;
     virtio_mmio_notify_queue(&g_device, VIRTIO_NET_TX_QUEUE);
 
-    uart_puts("virtio-net tx frame queued: len=");
-    uart_puthex64(total_len);
-    uart_puts("\n");
-
     for (uint32_t i = 0; g_tx_busy && (i < 100000U); ++i)
     {
         virtio_net_poll_tx();
@@ -313,23 +305,18 @@ void virtio_net_poll_rx(void)
 
     while (virtqueue_get_used(&g_rx_vq, &id, &len))
     {
-        uart_puts("virtio-net rx: desc=");
-        uart_puthex64(id);
-        uart_puts(" len=");
-        uart_puthex64(len);
-        uart_puts("\n");
-
         if (id < VIRTIO_NET_RX_BUFFERS)
         {
             if (len > VIRTIO_NET_HDR_SIZE)
             {
                 const uint8_t *frame = g_rx_buffers[id] + VIRTIO_NET_HDR_SIZE;
                 const uint16_t frame_len = (uint16_t)(len - VIRTIO_NET_HDR_SIZE);
+                ++g_net_stats.rx_frames;
                 eth_input(&g_netif, frame, frame_len);
             }
             else
             {
-                uart_puts("virtio-net rx: short virtio header\n");
+                ++g_net_stats.drop_bad_len;
             }
 
             post_rx_buffer((uint16_t)id);
